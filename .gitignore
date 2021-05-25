@@ -3,7 +3,6 @@ package-lock.json
 .idea/
 .DS_Store
 alpha-new/
-./build
 /webpack.private.js
 /report.html
 .vscode

@@ -16,6 +16,7 @@ class MapUIMenu extends LcgReact.define({
         var menuData = {};
         //是否显示
         var isShow = false;
+        var lastTarget = null;
 
         //组件结构
         this.$dom(function(){
@@ -58,8 +59,10 @@ class MapUIMenu extends LcgReact.define({
 
         //回调处理
         var MenuCallBack = function(vals){
+            isShow = false;
+            self.$r();
             if(self.props.callback)
-                self.props.callback(vals.item.props.value);
+                self.props.callback({...vals,value:vals.item.props.value,target:lastTarget});
         }
 
         /**
@@ -67,7 +70,8 @@ class MapUIMenu extends LcgReact.define({
          * @param {{x:number,y:number}} p 要显示菜单的位置
          * @param {*} data 当前的菜单状态
          */
-        this.show = function(p,data){
+        this.show = function(p,data,target){
+            lastTarget = target;
             pos = p;
             menuData = data || menuData;
             isShow = true;

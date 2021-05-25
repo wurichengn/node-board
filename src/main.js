@@ -6,5 +6,7 @@ var Defs = require("def-modules");
 !async function(){
     var editor = await EditorUI.new();
     Defs.base(editor.module.map.logic);
+    editor.module.map.logic.addNode("base/file/file-select");
+    editor.module.map.logic.addNode("base/file/file-to-string");
     document.body.appendChild(editor);
 }();

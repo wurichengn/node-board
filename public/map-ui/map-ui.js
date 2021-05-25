@@ -1,21 +1,78 @@
-import { LogicWorker } from "logic-worker/logic-worker.js";
+import { LogicWorker,LogicNode } from "logic-worker";
 
+var lcg = require("lcg");
 var React = require("react");
 var LcgReact = require("lcg-react");
 var MapUIMenu = require("./map-ui-menu.js");
+import {MapUINode} from "./map-ui-node.js";
+//初始化全局事件消息
+var LcgEvent = require("lcg-events");
+LcgEvent();
 
 /**节点编辑器界面 */
 export class MapUI extends LcgReact{
     async init(){
         var self = this;
+
+        /**构造线条 */
+        var buildLine = this.buildLine = function(p1,p2){
+            var c = {x:(p2.x + p1.x) / 2,y:(p2.y + p1.y) / 2};
+            return "M"+p1.x+","+p1.y+" Q"+(p1.x + 40)+","+p1.y+","+c.x+","+c.y+" T"+p2.x+","+p2.y;
+        }
+
+        /**构造临时线条 */
+        var getLines = function(){
+            var re = [];
+            for(var i in self.logic.nodes){
+                var node = self.logic.nodes[i];
+                if(node.state.line)
+                    re.push(<path key={i} className="top-line" d={buildLine(node.state.line[0],node.state.line[1])}></path>);
+            }
+            return re;
+        }
+
+        /**构造关联线条 */
+        var getLinks = function(){
+            var re = [];
+            for(var i in self.logic.nodes){
+                var node = self.logic.nodes[i];
+                var n1 = self.nodeModules[node.attr.uid];
+                if(n1 == null)
+                    continue;
+                for(var j in node.attr.links){
+                    /**@type {LogicWorker.LinkType} */
+                    var link = node.attr.links[j];
+                    var n2 = self.nodeModules[link.uid];
+                    if(n2 == null)
+                        continue;
+                    re.push(<MapUILink map={self} nodeIn={n1} keyIn={j} nodeOut={n2} keyOut={link.key}></MapUILink>);
+                }
+            }
+            return re;
+        }
+
+        /**@type {{[index:string]:MapUINode}} 节点组件表 */
+        this.nodeModules = {};
+
         //结构定义
         this.$dom(function(){
+            var nodes = [];
+            if(self.logic){
+                for(var i in self.logic.nodes)
+                    nodes.push(<MapUINode key={i} map={self} node={self.logic.nodes[i]}></MapUINode>);
+            }
+
             return <div>
                 <div className="bg"></div>
                 <svg lid="svg" width="8000" height="8000">
-                    <g lid="g"></g>
+                    <g>
+                        <g>
+                            <g>{getLines()}</g>
+                            <g>{getLinks()}</g>
+                        </g>
+                    </g>
                 </svg>
-                <div className="layout" lid="layout"></div>
+                <div className="layout" lid="layout">{nodes}</div>
             </div>;
         });
 
@@ -24,12 +81,30 @@ export class MapUI extends LcgReact{
             "width":"100%",
             "height":"100%",
             "position":"relative",
+            "background-color":"#fafafa",
+            "user-select":"none",
             ">svg":{
                 "position":"absolute",
                 "left":"50%",
                 "top":"50%",
                 "margin-left":"-4000px",
-                "margin-top":"-4000px"
+                "margin-top":"-4000px",
+                ">g":{
+                    "transform":"translate(4000px,4000px)",
+                    " .top-line":{
+                        "stroke":"#ff7e18",
+                        "stroke-width":"2",
+                        "fill":"none"
+                    },
+                    "cursor":"pointer"
+                }
+            },
+            ">.layout":{
+                "position":"absolute",
+                "left":"50%",
+                "top":"50%",
+                "width":"0px",
+                "height":"0px"
             }
         });
 
@@ -73,19 +148,102 @@ export class MapUI extends LcgReact{
         //右键菜单
         this.on("contextmenu",function(e){
             updateMenu();
-            baseMenu.show(e,self.moduleMenu);
+            self.baseMenu.show(e,self.moduleMenu);
             e.preventDefault();
         });
 
-        //基本右键菜单
-        var baseMenu = (await MapUIMenu.new({callback:function(e){
-            self.logic.addNode();
+        /**
+         * 在图内部发送消息
+         * @param {string} msg 消息类型
+         * @param {*} vals 消息内容
+         */
+        this.trigger = function(msg,vals){
+            lcg.triggerDom(msg,vals,self._proxy);
+        }
+
+        /**
+         * 鼠标坐标变换为视图坐标
+         * @param {{x:number,y:number}} pos 鼠标坐标
+         * @returns {{x:number,y:number}} 视图坐标
+         */
+        this.mouse2view = function(pos){
+            var box = self.ids["layout"].getBoundingClientRect();
+            return {x:pos.x - box.left,y:pos.y - box.top};
+        }
+
+        /**
+         * 显示关联右键菜单
+         * @param {*} data 
+         */
+        this.showLinkMenu = function(pos,data){
+            self.linkMenu.show(pos,{"删除":"#delete"},data);
+        }
+
+
+
+        
+        /**@type {MapUIMenu} 基本右键菜单 */
+        this.baseMenu = (await MapUIMenu.new({callback:function(e){
+            self.logic.addNode(e.value);
         }})).module;
 
+
+        /**@type {MapUIMenu} 连接线右键菜单 */
+        this.linkMenu = (await MapUIMenu.new({callback:function(e){
+            /**@type {MapUINode} */
+            var nodeIn = e.target.nodeIn;
+            nodeIn.node.setLink(e.target.keyIn,null);
+        }})).module;
+
+
         //侦听逻辑处理消息
-        this.message({"logic-add-node":function(){
-            console.log("add-node");
+        this.message({
+            "logic-add-node":function(){self.$r();},
+            "logic-node-update-state":function(){self.$r();},
+            "logic-node-update-attr":function(){self.$r();}
+        });
+
+
+        //每秒进行重绘
+        var cd = 0;
+        this.message("dt",function(){
+            cd--;
+            if(cd > 0)
+                return;
+            cd = 50;
             self.$r();
-        }});
+        });
+    }
+}
+
+
+/**关联组件 */
+class MapUILink extends LcgReact.define({
+    /**@type {MapUI} map实例 */
+    map:null,
+    /**@type {MapUINode} 数据输入节点 */
+    nodeIn:null,
+    /**@type {string} 数据输入对应的key */
+    keyIn:null,
+    /**@type {MapUINode} 数据输出节点 */
+    nodeOut:null,
+    /**@type {string} 数据输出对应的key */
+    keyOut:null
+}){
+    init(){
+        var self = this;
+        var {map,nodeIn,nodeOut,keyIn,keyOut} = this.props;
+
+        //节点结构
+        this.$dom(function(){
+            return <path key={nodeIn.node.attr.uid + ":" + keyIn} className="top-line" d={map.buildLine(nodeOut.outputModules[keyOut].getPointPos(),nodeIn.inputModules[keyIn].getPointPos())}></path>;
+        });
+
+        //右键菜单
+        this.on("contextmenu",function(e){
+            e.stopPropagation();
+            e.preventDefault();
+            map.showLinkMenu(e,self.props);
+        });
     }
 }
