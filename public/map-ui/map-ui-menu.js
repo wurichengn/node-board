@@ -52,7 +52,7 @@ class MapUIMenu extends LcgReact.define({
                     list.push(buildMenu(data[i],i));
             }
             if(key == null)
-                return <Menu onSelect={MenuCallBack}>{list}</Menu>;
+                return <Menu onClick={MenuCallBack}>{list}</Menu>;
             else
                 return <Menu.SubMenu title={key}>{list}</Menu.SubMenu>;
         }
@@ -62,7 +62,7 @@ class MapUIMenu extends LcgReact.define({
             isShow = false;
             self.$r();
             if(self.props.callback)
-                self.props.callback({...vals,value:vals.item.props.value,target:lastTarget});
+                self.props.callback({...vals,value:vals.item.props.value,target:lastTarget,e:pos});
         }
 
         /**
