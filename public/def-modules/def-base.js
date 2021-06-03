@@ -7,7 +7,7 @@ Tools.Loader.initPacs();
 //构建一个基础容器
 var BasePanle = function(vals,dom){
     return <div style={{"display":"flex","width":"100%"}}>
-        <div style={{flex:1,lineHeight:"25px",textAlign:"left",paddingLeft:"10px"}}>{vals.name}</div>
+        <div style={{flex:1,lineHeight:"25px",textAlign:"left",paddingLeft:"10px",minWidth:"45px"}}>{vals.name}</div>
         <div style={{flex:2}}>{dom}</div>
     </div>;
 }
@@ -52,6 +52,16 @@ module.exports = function(logic){
         formRender:function(vals){
             return BasePanle(vals,<input value={vals.value || ""} className="ant-input" style={{height:"22px",margin:"2px 5px",width:"calc(100% - 10px)"}} type="text" onChange={function(e){
                 vals.module.setValue(e.target.value);
+            }}></input>);
+        }
+    });
+
+    //文件
+    logic.addType("file",{
+        name:"文件",
+        formRender:function(vals){
+            return BasePanle(vals,<input style={{margin:"2px 5px",width:"calc(100% - 10px)",minWidth:"100px"}} type="file" onChange={function(e){
+                vals.module.setValue(e.target.files[0]);
             }}></input>);
         }
     });
