@@ -28,6 +28,8 @@ export var LogicNode = function(worker,key,saveInfo,correct = false){
         x:0,
         /**纵坐标 */
         y:0,
+        /**节点的宽度 */
+        width:120,
         /**唯一编号 */
         uid:lcg.UUID(),
         /**@type {{[index:string]:(LogicWorker.LinkType)}} 输入的关联内容 */
@@ -172,7 +174,7 @@ export var LogicNode = function(worker,key,saveInfo,correct = false){
     /**
      * 让组件主动执行一次逻辑，通过runOnce执行的话组件的所有依赖组件都会尝试执行
      */
-    this.runOnce = async function(task){
+    this.runOnce = async function(task,followKey){
         //根节点预先进行依赖传递
         if(task == null)
             this.updateFollow();
@@ -212,7 +214,7 @@ export var LogicNode = function(worker,key,saveInfo,correct = false){
         try{
             //运行节点
             if(this.run && typeof this.run == "function"){
-                var re = await this.run(this.state.args);
+                var re = await this.run(this.state.args,followKey);
                 if(typeof re == "object"){
                     for(var i in re)
                         this.state.values[i] = re[i];
@@ -235,7 +237,7 @@ export var LogicNode = function(worker,key,saveInfo,correct = false){
             for(var j in node.attr.links){
                 var link = node.attr.links[j];
                 if(link.uid == this.attr.uid && node.state.inputs[j].follow)
-                    await node.runOnce(task);
+                    await node.runOnce(task,j);
             }
         }
     }

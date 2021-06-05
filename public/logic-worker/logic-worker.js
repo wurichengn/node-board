@@ -94,7 +94,7 @@ export var LogicWorker = function(){
      this.canTypeAtoB = function(a,b){
         if(a == null || b == null)
             return false;
-        if(b == "*" || a == b)
+        if(a == "*" || b == "*" || a == b)
             return true;
         return false;
     }
@@ -230,7 +230,7 @@ LogicWorker.ModuleType = {
     outputs:{},
     /**@type {(this:LogicNode)=>boolean} 返回当前是否需要更新，如果返回false，被依赖请求时不会运行 */
     needUpdate:null,
-    /**@type {(this:LogicNode,args)=>{}} 组件运行时的处理逻辑，接收当前的输入参数，需要返回一个字典，包含所有的输出内容，支持异步*/
+    /**@type {(this:LogicNode,args,followKey:string)=>{}} 组件运行时的处理逻辑，接收当前的输入参数，需要返回一个字典，包含所有的输出内容，支持异步*/
     run:null,
     /**@type {(this:LogicNode,module:MapUINode)=>{}} 图组件渲染时会调用该方法，返回一个虚拟节点用于显示在组件内部进行扩展 */
     infoRender:null,
