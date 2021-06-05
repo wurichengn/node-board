@@ -1,15 +1,5 @@
 #include base;
-
-//光线结构体
-struct Ray{
-    vec3 pos;
-    vec3 dir;
-    //颜色
-    vec4 color;
-    //光照颜色
-    vec4 light_color;
-    float length;
-};
+#include random;
 
 //顶点信息
 struct Vertex{
@@ -17,6 +7,8 @@ struct Vertex{
     vec3 pos;
     //顶点法向
     vec3 normal;
+	//平面法向，用于偏移
+	vec3 plan_normal;
     //顶点uv
     vec2 uv;
 };
@@ -33,10 +25,22 @@ struct HitInfo{
 	int matId;
 };
 
+//光线结构体
+struct Ray{
+    vec3 pos;
+    vec3 dir;
+    //颜色
+    vec4 color;
+    //光照颜色
+    vec4 light_color;
+    float length;
+	HitInfo info;
+};
+
 //圆周率
 const float PI = 3.14159265357;
 //最小命中距离
-const float LENGTH_MIN = 0.00001;
+const float LENGTH_MIN = 0.0001;
 //最远命中距离
 const float LENGTH_MAX = 99999999999999999999999999999999999999.0;
 
@@ -93,9 +97,9 @@ void RayIn_Sphere(inout HitInfo hinfo,inout Ray ray,in vec3 center,in float radi
     //命中
 	hinfo.hit = true;
 	hinfo.vertex.pos = ray.pos + t * ray.dir;
-	hinfo.vertex.normal = (hinfo.vertex.pos - center) / radius;
+	hinfo.vertex.normal = hinfo.vertex.plan_normal = (hinfo.vertex.pos - center) / radius;
 	hinfo.vertex.uv = Sphere2UV(hinfo.vertex.normal);
-	hinfo.matId = 0;
+	hinfo.matId = 1;
 }
 
 
@@ -119,7 +123,8 @@ void Vertex_Interpolate(vec3 abg,Vertex A,Vertex B,Vertex C,out Vertex vert){
 	vert.uv[0] = dot(abg, vec3(A.uv[0], B.uv[0], C.uv[0]));
 	vert.uv[1] = dot(abg, vec3(A.uv[1], B.uv[1], C.uv[1]));
 	vert.pos = abg[0] * A.pos + abg[1] * B.pos + abg[2] * C.pos;
-	vert.normal = abg[0] * A.normal + abg[1] * B.normal + abg[2] * C.normal;
+	vert.normal = vert.plan_normal = normalize(cross(A.pos - B.pos,C.pos - B.pos));
+	//vert.normal = abg[0] * A.normal + abg[1] * B.normal + abg[2] * C.normal;
 }
 
 
@@ -156,6 +161,7 @@ vec3 Vec3ApplyMat4(vec3 v3,mat4 m4) {
 
 //通过相机矩阵和平面坐标产生光线，此时输出的dir并非单位向量
 Ray CameraMat2Ray(mat4 cmat,vec2 pos){
+	pos = pos + u_rand_seed.xy / u_view_size * 2.0;
     Ray re;
     re.pos = Vec3ApplyMat4(vec3(pos,-1),cmat);
     re.dir = Vec3ApplyMat4(vec3(pos,1),cmat) - re.pos;
