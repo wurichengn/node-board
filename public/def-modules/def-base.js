@@ -84,6 +84,9 @@ module.exports = function(logic){
             "datas":{type:"dicom:study",name:"检查数据"},
             "tags":{type:"dicom:tags",name:"AI检测结果"}
         },
+        init(){
+            this.runOnce();
+        },
         infoRender:function(){
             var self = this;
             return <div style={{"width":"250px"}}>
@@ -217,6 +220,19 @@ module.exports = function(logic){
                 running = false;
             });
         },
+    });
+
+    //选择影像
+    logic.addModule("base/tools/trigger-button",{
+        menu:"基础/工具/按钮触发器",
+        name:"按钮触发器",
+        infoRender:function(){
+            var self = this;
+            return <button onClick={function(){self.runOnce()}}>触发</button>;
+        },
+        inputs:{
+            "input":{name:"任意输入",type:"*"}
+        }
     });
 
     //简单变量

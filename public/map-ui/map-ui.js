@@ -46,14 +46,29 @@ export class MapUI extends LcgReact.define({},{
                 var n1 = self.nodeModules[node.attr.uid];
                 if(n1 == null)
                     continue;
+                //循环创建连接线
                 for(var j in node.attr.links){
-                    /**@type {LogicWorker.LinkType} */
-                    var link = node.attr.links[j];
-                    var n2 = self.nodeModules[link.uid];
-                    if(n2 == null)
-                        continue;
-                    var key = n1.node.attr.uid + ":" + n2.node.attr.uid + ":" + j + ":" + link.key;
-                    re.push(<MapUILink key={key} map={self} nodeIn={n1} keyIn={j} nodeOut={n2} keyOut={link.key}></MapUILink>);
+                    if(node.state.inputs[j].many){
+                        //多输入
+                        for(var k in node.attr.links[j]){
+                            /**@type {LogicWorker.LinkType} */
+                            var link = node.attr.links[j][k];
+                            var n2 = self.nodeModules[link.uid];
+                            if(n2 == null)
+                                continue;
+                            var key = n1.node.attr.uid + ":" + n2.node.attr.uid + ":" + j + ":" + link.key + ":" + k;
+                            re.push(<MapUILink index={k} key={key} map={self} nodeIn={n1} keyIn={j} nodeOut={n2} keyOut={link.key}></MapUILink>);
+                        }
+                    }else{
+                        //单输入
+                        /**@type {LogicWorker.LinkType} */
+                        var link = node.attr.links[j];
+                        var n2 = self.nodeModules[link.uid];
+                        if(n2 == null)
+                            continue;
+                        var key = n1.node.attr.uid + ":" + n2.node.attr.uid + ":" + j + ":" + link.key;
+                        re.push(<MapUILink key={key} map={self} nodeIn={n1} keyIn={j} nodeOut={n2} keyOut={link.key}></MapUILink>);
+                    }
                 }
             }
             return re;
@@ -240,7 +255,7 @@ export class MapUI extends LcgReact.define({},{
         this.linkMenu = (await MapUIMenu.new({callback:function(e){
             /**@type {MapUINode} */
             var nodeIn = e.target.nodeIn;
-            nodeIn.node.setLink(e.target.keyIn,null);
+            nodeIn.node.setLink(e.target.keyIn,null,e.target.index);
         }})).module;
 
 
@@ -322,11 +337,16 @@ class MapUILink extends LcgReact.define({
     /**@type {MapUINode} 数据输出节点 */
     nodeOut:null,
     /**@type {string} 数据输出对应的key */
-    keyOut:null
+    keyOut:null,
+    /**@type {number} 对应的输入下标，多输入时存在 */
+    index:null
 }){
     init(){
         var self = this;
         var {map,nodeIn,nodeOut,keyIn,keyOut} = this.props;
+
+        if(self.props.index != null)
+            keyIn = keyIn + "##" + self.props.index;
 
         //节点结构
         this.$dom(function(){

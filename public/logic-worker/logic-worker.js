@@ -117,6 +117,8 @@ export var LogicWorker = function(){
      */
     this.checkTypeValue = function(val,conf){
         var type = this.getType(conf.type);
+        if(conf.default && val == null)
+            val = conf.default;
         if(type.check)
             return type.check(val,conf);
         return val;
@@ -234,6 +236,8 @@ LogicWorker.ModuleType = {
     run:null,
     /**@type {(this:LogicNode,module:MapUINode)=>{}} 图组件渲染时会调用该方法，返回一个虚拟节点用于显示在组件内部进行扩展 */
     infoRender:null,
+    /**@type {(this:LogicNode)=>{}} 保存时运行的代码 */
+    save:null,
     /**@type {boolean} 是否在参数变化或者关联关系变化时自动运行一次，默认为false，如果为异步函数则不推荐设置该值为true */
     autoRun:false
 };

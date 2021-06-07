@@ -35,7 +35,9 @@ export var LogicNode = function(worker,key,saveInfo,correct = false){
         /**@type {{[index:string]:(LogicWorker.LinkType)}} 输入的关联内容 */
         links:{},
         /**保存的表单数据，运行时不会改变，仅保存和读取时使用 */
-        forms:{}
+        forms:{},
+        /**多输入项的长度 */
+        manyNums:{}
     };
 
     //写入保存的内容
@@ -64,35 +66,93 @@ export var LogicNode = function(worker,key,saveInfo,correct = false){
 
     /**矫正属性内容 */
     this.correctData = function(){
-        //去掉空连接
+        //去掉无效连接
         for(var i in self.attr.links){
-            if(self.attr.links[i] == null)
+            if(self.attr.links[i] == null){
                 delete self.attr.links[i];
-            if(worker.nodes[self.attr.links[i].uid] == null)
+                continue;
+            }
+            if(self.state.inputs[i] == null){
                 delete self.attr.links[i];
+                continue;
+            }
+            if(self.state.inputs[i].many){
+                for(var j in self.attr.links[i]){
+                    if(j >= self.attr.manyNums[i] || self.attr.links[i][j] == null || worker.nodes[self.attr.links[i][j].uid] == null)
+                        delete self.attr.links[i][j];
+                }
+            }else{
+                if(worker.nodes[self.attr.links[i].uid] == null)
+                    delete self.attr.links[i];
+            }
         }
 
         //表单内容默认参数填写
         for(var i in self.state.inputs){
-            if(self.state.inputs[i].default != null && self.state.forms[i] == null)
-                self.state.forms[i] = self.state.inputs[i].default;
+            if(self.state.inputs[i].many){
+                if(!lcg.isObject(self.state.forms[i]))
+                    self.state.forms[i] = {};
+                for(var j = 0;j < self.attr.manyNums[i];j++){
+                    if(self.state.inputs[i].default != null && self.state.forms[i][j] == null)
+                        self.state.forms[i] = self.state.inputs[i].default;
+                }
+            }else{
+                if(self.state.inputs[i].default != null && self.state.forms[i] == null)
+                    self.state.forms[i] = self.state.inputs[i].default;
+            }
         }
 
         //清空参数
         this.state.args = {};
+
         //从表单更新参数
-        for(var i in this.state.forms)
-            this.state.args[i] = this.state.forms[i];
+        for(var i in this.state.forms){
+            if(this.state.inputs[i].many)
+                this.state.args[i] = {...this.state.forms[i]};
+            else
+                this.state.args[i] = this.state.forms[i];
+        }
+
+        //多输入参数预处理
+        for(var i in this.state.inputs){
+            if(this.state.inputs[i].many)
+                this.state.args[i] = this.state.args[i] || {};
+        }
+        
         //从关联关系更新参数
         for(var i in this.attr.links){
-            var node = worker.nodes[this.attr.links[i].uid];
-            this.state.args[i] = worker.checkTypeValue(node.state.values[this.attr.links[i].key],self.state.inputs[i]);
+            if(self.state.inputs[i].many){
+                for(var j in self.attr.links[i]){
+                    var node = worker.nodes[this.attr.links[i][j].uid];
+                    this.state.args[i][j] = worker.checkTypeValue(node.state.values[this.attr.links[i][j].key],self.state.inputs[i]);
+                }
+            }else{
+                var node = worker.nodes[this.attr.links[i].uid];
+                this.state.args[i] = worker.checkTypeValue(node.state.values[this.attr.links[i].key],self.state.inputs[i]);
+            }
         }
 
         //默认参数写入
         for(var i in this.state.inputs){
-            if(this.state.args[i] == null && this.state.inputs[i].default != null)
-                this.state.args[i] = this.state.inputs[i].default;
+            if(self.state.inputs[i].many){
+                for(var j = 0;j < self.attr.manyNums[i];j++){
+                    if(this.state.args[i] == null && this.state.inputs[i].default != null)
+                        this.state.args[i] = this.state.inputs[i].default;
+                }
+            }else{
+                if(this.state.args[i] == null && this.state.inputs[i].default != null)
+                    this.state.args[i] = this.state.inputs[i].default;
+            }
+        }
+
+        //转换多输入参数为数组
+        for(var i in this.state.inputs){
+            if(this.state.inputs[i].many){
+                var list = [];
+                for(var j = 0;j < self.attr.manyNums[i];j++)
+                    list.push(this.state.args[i][j])
+                this.state.args[i] = list;
+            }
         }
     }
 
@@ -129,8 +189,13 @@ export var LogicNode = function(worker,key,saveInfo,correct = false){
         for(var i in state){
             //forms单独处理
             if(i == "forms"){
-                for(var j in state[i])
-                    this.state[i][j] = worker.checkTypeValue(state[i][j],self.state.inputs[j]);
+                for(var j in state[i]){
+                    if(this.state.inputs[j] && this.state.inputs[j].many){
+                        for(var k in state[i][j])
+                            this.state[i][j][k] = worker.checkTypeValue(state[i][j][k],self.state.inputs[j]);
+                    }else
+                        this.state[i][j] = worker.checkTypeValue(state[i][j],self.state.inputs[j]);
+                }
                 updateArgs();
                 continue;
             }
@@ -145,11 +210,18 @@ export var LogicNode = function(worker,key,saveInfo,correct = false){
      * 设置一个关联关系
      * @param {string} key 要设置的输入key
      * @param {LogicWorker.LinkType} link 关联内容
+     * @param {number} index 要关联的下标，多输入时生效
      */
-    this.setLink = function(key,link){
+    this.setLink = function(key,link,index){
         if(link != null && !worker.canTypeAtoB(worker.nodes[link.uid].state.outputs[link.key].type,self.state.inputs[key].type))
             return;
-        this.attr.links[key] = link;
+        if(self.state.inputs[key].many){
+            //多输入处理
+            if(this.attr.links[key] == null || this.attr.links[key].uid)
+                this.attr.links[key] = {};
+            this.attr.links[key][index] = link;
+        }else
+            this.attr.links[key] = link;
         this.triggerMessage("update-attr");
         this.correctData();
         updateArgs();
@@ -164,6 +236,9 @@ export var LogicNode = function(worker,key,saveInfo,correct = false){
         //记录表单数据
         for(var i in this.state.forms)
             this.attr.forms[i] = this.state.forms[i];
+        //独立的保存数据处理
+        if(this.save)
+            this.save();
         return this.attr;
     }
 
@@ -195,12 +270,21 @@ export var LogicNode = function(worker,key,saveInfo,correct = false){
         this.state.errorInfo = null;
         self.triggerMessage("run-ready");
 
+        //运行一个节点
+        var runNode = async function(node){
+            if(!node.needUpdate())
+                return;
+            await node.runOnce(task);
+        }
+
         //处理所有的依赖
         for(var i in this.attr.links){
-            var node = worker.nodes[this.attr.links[i].uid];
-            if(!node.needUpdate())
-                continue;
-            await node.runOnce(task);
+            if(self.state.inputs[i].many){
+                for(var j in this.attr.links[i])
+                    await runNode(worker.nodes[this.attr.links[i][j].uid]);
+            }else{
+                await runNode(worker.nodes[this.attr.links[i].uid]);
+            }
         }
 
         //重新处理参数依赖
@@ -257,7 +341,9 @@ export var LogicNode = function(worker,key,saveInfo,correct = false){
         //初始化任务记录
         task = task || {
             /**运行完毕的节点UID */
-            endNode:{}
+            endNode:{},
+            /**发起运行的节点 */
+            runNode:self
         };
 
         //如果该节点运行过
@@ -268,22 +354,33 @@ export var LogicNode = function(worker,key,saveInfo,correct = false){
         //默认置否
         followUpdate = false;
 
-        //处理所有的依赖
-        for(var i in this.attr.links){
-            var node = worker.nodes[this.attr.links[i].uid];
+        //更新一个节点
+        var updateNode = function(node){
             //处理依赖
             node.updateFollow(task);
             //使用needUpdate进行判断
             if(!node.needUpdate())
-                continue;
+                return;
+            
             //依赖需要更新则自身也需要更新
             followUpdate = true;
+        }
+
+        //处理所有的依赖
+        for(var i in this.attr.links){
+            if(self.state.inputs[i].many){
+                for(var j in this.attr.links[i])
+                    updateNode(worker.nodes[this.attr.links[i][j].uid]);
+            }else{
+                updateNode(worker.nodes[this.attr.links[i].uid]);
+            }
         }
 
         //如果有依赖型参数变化
         if(argsNeedUpdate){
             followUpdate = true;
-            argsNeedUpdate = false;
+            if(task.runNode != self)
+                argsNeedUpdate = false;
         }
 
         return followUpdate;
@@ -293,7 +390,7 @@ export var LogicNode = function(worker,key,saveInfo,correct = false){
     var argsNeedUpdate = true;
 
     /**参数或者结构被更新 */
-    var updateArgs = function(){
+    var updateArgs = self.updateArgs = function(){
         argsNeedUpdate = true;
         if(self.autoRun)
             self.runOnce();
@@ -316,6 +413,7 @@ export var LogicNode = function(worker,key,saveInfo,correct = false){
     this.uiInit = this.module.uiInit;
     this.infoRender = this.module.infoRender;
     this.autoRun = this.module.autoRun;
+    this.save = this.module.save;
 
     //初始化逻辑扩展
     if(this.module.init)

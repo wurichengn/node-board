@@ -19,10 +19,17 @@ var React = require("react");
             "image":{name:"图像",type:"image"}
         },
         autoRun:true,
+        init:function(){
+            if(this.attr.base64)
+                this.imgInfo = {type:"url",data:this.attr.base64};
+        },
+        save:function(){
+            this.attr.base64 = this.imgInfo.data;
+        },
         run:function(vals){
             var self = this;
 			//如果没有变化则直接返回
-			if(self.file && vals.file == self.file && self.imgInfo != null)
+			if((self.file == null || vals.file == self.file) && self.imgInfo != null)
 				return {image:self.imgInfo};
 			//如果图片为空则直接报错
 			if(vals.file == null)
@@ -52,7 +59,7 @@ var React = require("react");
         menu:"图像/工具/图像预览工具",
         name:"图像预览工具",
         infoRender:function(){
-            return <img lid="img" style={{maxWidth:"100%",border:"1px solid #ddd"}} />;
+            return <canvas lid="canvas" style={{maxWidth:"100%",border:"1px solid #ddd"}} />;
         },
         inputs:{
             img:{name:"图像",type:"image",follow:true}
@@ -63,7 +70,7 @@ var React = require("react");
         run:async function(vals){
             if(this.UI == null)
                 return;
-            await Tools.image2Img(vals.img,this.UI.ids["img"]);
+            await Tools.image2Canvas(vals.img,this.UI.ids["canvas"]);
         }
     });
 
@@ -81,7 +88,9 @@ var React = require("react");
         //初始化
 		init:function(){
 			this.canvas = document.createElement("canvas");
+            this.canvas.width = this.canvas.height = 1;
 			this.ctx = this.canvas.getContext("2d");
+            this.texture = Tools.gpu.createElementTexture(this.canvas);
 		},
 		//渲染时执行  必须要有，需要返回运行结果，可以异步处理。
 		run:async function(vals){
@@ -93,7 +102,6 @@ var React = require("react");
 			//计算宽度
 			ctx.font = font;
 			var box = ctx.measureText(tex);
-            console.log(box);
             var left = Math.max(box.actualBoundingBoxLeft,0);
 			//根据宽度设置画布大小
 			this.canvas.width = Math.floor(box.actualBoundingBoxRight - left) + 4;
@@ -102,11 +110,12 @@ var React = require("react");
 			ctx.font = font;
 			//ctx.fillStyle = vals.font_color;
 			ctx.fillText(tex,-left + 2,box.actualBoundingBoxAscent + 2);
+            this.texture.updateData(this.canvas);
 			//输出图层1
 			return {
 				"img":{
-					data:this.canvas,
-					type:"canvas",
+					data:this.texture,
+					type:"texture",
 					width:this.canvas.width,
 					height:this.canvas.height
 				}
@@ -150,6 +159,37 @@ var React = require("react");
                 height:img.height,
                 data:this.fbi.getLayer(0)
             }}
+        }
+    });
+
+
+    logic.addModule("image:image-canvas",{
+        menu:"图像/画布",
+        name:"画布",
+        inputs:{
+            width:{name:"宽度",default:256,type:"number",max:2048},
+            height:{name:"高度",default:256,type:"number",max:2048},
+            objs:{name:"可视对象",many:true,type:"image"}
+        },
+        outputs:{
+            image:{name:"图像",type:"image"}
+        },
+        run:async function(vals){
+            /**@type {Tools.ImageCanvas} */
+            this.canvas = this.canvas || new Tools.ImageCanvas();
+            
+            //渲染场景
+            this.canvas.setSize(vals.width,vals.height);
+            var re = await this.canvas.draw(vals.objs);
+
+            return {
+                image:{
+                    type:"texture",
+                    data:re.fbi,
+                    width:vals.width,
+                    height:vals.height
+                }
+            }
         }
     })
 

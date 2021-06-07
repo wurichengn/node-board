@@ -49,7 +49,10 @@ export class MapUINode extends LcgReact.define({
             //构造输入
             var inputs = [];
             for(var i in node.state.inputs){
-                inputs.push(<MapUIInput key={i} id={i} node={self} conf={node.state.inputs[i]}></MapUIInput>)
+                if(node.state.inputs[i].many)
+                    inputs.push(<MapUIInputGroup key={i} id={i} node={self} conf={node.state.inputs[i]}></MapUIInputGroup>);
+                else
+                    inputs.push(<MapUIInput key={i} id={i} node={self} conf={node.state.inputs[i]}></MapUIInput>);
             }
 
             //构造输出
@@ -222,9 +225,8 @@ export class MapUINode extends LcgReact.define({
 }
 
 
-
-/**节点输入UI组件 */
-export class MapUIInput extends LcgReact.define({
+/**节点输入组 */
+export class MapUIInputGroup extends LcgReact.define({
     /**@type {MapUINode} 输出所属的节点组件 */
     node:null,
     /**@type {string} 输出的节点下标 */
@@ -234,22 +236,99 @@ export class MapUIInput extends LcgReact.define({
 }){
     init(){
         var self = this;
+        var node = this.node = this.props.node;
+
+        //数量缺审
+        if(node.node.attr.manyNums[this.props.id] == null)
+            node.node.attr.manyNums[this.props.id] = 1;
+
+        //渲染
+        this.$dom(function(){
+            //构造输入组件集
+            var inputs = [];
+            for(var i = 0;i < node.node.attr.manyNums[this.props.id];i++){
+                inputs.push(<MapUIInput key={i} index={i} id={self.props.id} node={node} conf={self.props.conf}></MapUIInput>);
+            }
+
+            var name = self.props.conf.name || self.props.id;
+
+            return <div>
+                <div className="title">
+                    {name}
+                    <button onClick={function(){changeNum(-1)}}>-</button>
+                    <button onClick={function(){changeNum(1)}}>+</button>
+                </div>
+                <div>{inputs}</div>
+            </div>;
+        });
+
+        /**调整输入数量 */
+        var changeNum = function(val){
+            node.node.attr.manyNums[self.props.id] += val;
+            node.node.setAttr();
+            node.node.updateArgs();
+        }
+
+        this.css({
+            ">.title":{
+                "text-align":"left",
+                "line-height":"26px",
+                "padding-left":"10px",
+                ">button":{
+                    "width":"25px",
+                    "height":"20px",
+                    "line-height":"0px",
+                    "margin-left":"5px"
+                }
+            }
+        })
+    }
+}
+
+
+
+/**节点输入UI组件 */
+export class MapUIInput extends LcgReact.define({
+    /**@type {MapUINode} 输出所属的节点组件 */
+    node:null,
+    /**@type {string} 输出的节点下标 */
+    id:null,
+    /**@type {LogicWorker.InputType} 输出节点的参数 */
+    conf:null,
+    /**@type {number} 输入列表下标，多输入时存在 */
+    index:null
+}){
+    init(){
+        var self = this;
         var id = this.id = this.props.id;
         var node = this.node = this.props.node;
         var conf = this.conf = this.props.conf;
+        this.index = this.props.index;
 
         //组件结构
         this.$dom(function(){
             //输入key绑定
-            node.inputModules[id] = self;
+            if(self.props.conf.many)
+                node.inputModules[id + "##" + self.props.index] = self;
+            else
+                node.inputModules[id] = self;
 
             //输入名
             var name = self.props.conf.name || id;
+            if(self.props.conf.many)
+                name = "#" + self.props.index;
 
             //是否有关联项
             var contentOpacity = 1;
-            if(node.node.attr.links[id])
+            if(!self.props.conf.many && node.node.attr.links[id])
                 contentOpacity = 0.5;
+            if(self.props.conf.many && node.node.attr.links[id] && node.node.attr.links[id][self.props.index])
+                contentOpacity = 0.5;
+
+            //数值处理
+            var value = node.node.state.forms[id];
+            if(self.props.conf.many)
+                value = node.node.state.forms[id][self.props.index];
 
             //输入表单构造
             var type = node.node.worker.getType(self.props.conf.type);
@@ -261,7 +340,7 @@ export class MapUIInput extends LcgReact.define({
                     name:name,
                     conf:self.props.conf,
                     node,
-                    value:node.node.state.forms[id]
+                    value:value
                 });
             }
             if(vdom)
@@ -277,8 +356,13 @@ export class MapUIInput extends LcgReact.define({
             if(self.props.conf.ban_link)
                 pointDisplay = "none";
 
-            return <div>
-                {vdom || <div className="content" style={{opacity:contentOpacity}}>{self.props.conf.name || id}</div>}
+            //样式
+            var className = "";
+            if(self.props.conf.many)
+                className += " child";
+
+            return <div className={className}>
+                {vdom || <div className="content" style={{opacity:contentOpacity}}>{name}</div>}
                 <div className={pointClass} lid="point" title={"类型：" + type.name} style={{display:pointDisplay}}></div>
             </div>;
         });
@@ -287,6 +371,9 @@ export class MapUIInput extends LcgReact.define({
         this.css({
             "position":"relative",
             "min-height":"26px",
+            ".child":{
+                "background-color":"#fafafa"
+            },
             ">.form":{
                 "min-height":"100%",
                 "text-align":"center",
@@ -315,9 +402,17 @@ export class MapUIInput extends LcgReact.define({
 
         /**写入表单值 */
         this.setValue = function(val){
-            node.node.setState({
-                forms:{[id]:val}
-            });
+            if(self.props.conf.many){
+                //多输入
+                node.node.setState({
+                    forms:{[id]:{[self.props.index]:val}}
+                });
+            }else{
+                //单输入
+                node.node.setState({
+                    forms:{[id]:val}
+                });
+            }
         }
 
         /**
@@ -435,7 +530,7 @@ export class MapUIOutput extends LcgReact.define({
                 if(e.target.$$__map_input_module){
                     /**@type {MapUIInput} */
                     var input = e.target.$$__map_input_module;
-                    input.node.node.setLink(input.id,{uid:node.node.attr.uid,key:id});
+                    input.node.node.setLink(input.id,{uid:node.node.attr.uid,key:id},input.index);
                 }
                 node.map.setState({outType:null});
                 node.node.setState({line:null});
