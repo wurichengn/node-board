@@ -64,6 +64,8 @@ export var LogicWorker = function(){
      * @param {*} info `可选`初始化参数
      */
     this.addNode = function(type,info,trigger = true){
+        if(this.modules[type] == null)
+            return console.warn("没有定义["+type+"]组件");
         var node = new LogicNode(this,type,info,trigger);
         this.nodes[node.attr.uid] = node;
         if(trigger)
@@ -146,9 +148,95 @@ export var LogicWorker = function(){
         for(var i in data.nodes)
             this.addNode(data.nodes[i].type,data.nodes[i],false);
         //矫正节点内容
-        for(var i in this.nodes)
+        for(var i in this.nodes){
             this.nodes[i].correctData();
+            if(this.nodes[i].updateForms)
+                this.nodes[i].updateForms();
+        }
         this.triggerMessage("load-data");
+    }
+
+
+    /**
+     * 获取所有的输入配置
+     * @returns
+     */
+    this.getGlobalInputs = function(){
+        var re = [];
+        for(var i in this.nodes){
+            var node = this.nodes[i];
+            for(var j in node.state.globalInput){
+                var input = node.state.globalInput[j];
+                re.push(input);
+            }
+        }
+        return re;
+    }
+
+    /**
+     * 获取所有的输出配置
+     * @returns
+     */
+     this.getGlobalOutputs = function(){
+        var re = [];
+        for(var i in this.nodes){
+            var node = this.nodes[i];
+            for(var j in node.state.globalOutput){
+                var output = node.state.globalOutput[j];
+                re.push(output);
+            }
+        }
+        return re;
+    }
+
+
+    //最后一次运行的参数表
+    var lastArgs = {};
+    /**
+     * 从全局输出运行图
+     * @param {string} key 要运行的输出节点名
+     * @param {*} args 运行输入的全局变量
+     */
+    this.run = async function(key,args){
+        args = args || {};
+        //写入变量接收
+        for(var i in this.nodes){
+            var node = this.nodes[i];
+            for(var j in node.state.globalInput){
+                var input = node.state.globalInput[j];
+                if(input && args[input.key] != null){
+                    input.value = args[input.key];
+                    if(args[input.key] != lastArgs[input.key]){
+                        node.updateArgs();
+                    }
+                }
+            }
+        }
+        lastArgs = {...args};
+        //运行输出组件
+        var end = false;
+        for(var i in this.nodes){
+            if(end)
+                break;
+            var node = this.nodes[i];
+            for(var j in node.state.globalOutput){
+                if(node.state.globalOutput[j].key == key){
+                    end = true;
+                    await node.runOnce();
+                    break;
+                }
+            }
+        }
+        //获取输出结果
+        var re = {}
+        for(var i in this.nodes){
+            var node = this.nodes[i];
+            for(var j in node.state.globalOutput){
+                re[node.state.globalOutput[j].key] = node.state.globalOutput[j].value;
+            }
+        }
+
+        return re;
     }
 }
 
@@ -238,6 +326,8 @@ LogicWorker.ModuleType = {
     infoRender:null,
     /**@type {(this:LogicNode)=>{}} 保存时运行的代码 */
     save:null,
+    /**@type {(this:LogicNode)=>{}} 表单属性更新时调用 */
+    updateForms:null,
     /**@type {boolean} 是否在参数变化或者关联关系变化时自动运行一次，默认为false，如果为异步函数则不推荐设置该值为true */
     autoRun:false
 };

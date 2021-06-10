@@ -49,6 +49,8 @@ export class MapUINode extends LcgReact.define({
             //构造输入
             var inputs = [];
             for(var i in node.state.inputs){
+                if(node.state.inputs[i].show == false)
+                    continue;
                 if(node.state.inputs[i].many)
                     inputs.push(<MapUIInputGroup key={i} id={i} node={self} conf={node.state.inputs[i]}></MapUIInputGroup>);
                 else

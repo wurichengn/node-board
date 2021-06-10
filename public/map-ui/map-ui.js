@@ -183,7 +183,7 @@ export class MapUI extends LcgReact.define({},{
             for(var i in self.logic.types){
                 var type = self.logic.types[i];
                 //如果支持表单
-                if(type.formRender && type.name)
+                if(type.name)
                     addModuleMenu("变量/" + type.name,"$$type/" + i);
             }
         }
@@ -286,6 +286,14 @@ export class MapUI extends LcgReact.define({},{
             var isd = false;
             var sx,sy,mx,my;
 
+            self.on("mousewheel",function(e){
+                e.preventDefault();
+                self.setState({
+                    x:self.state.x - e.deltaX,
+                    y:self.state.y - e.deltaY
+                });
+            });
+
             self.on("mousedown",function(e){
                 if(e.button != 1)
                     return;
@@ -321,6 +329,22 @@ export class MapUI extends LcgReact.define({},{
                 return;
             cd = 50;
             self.$r();
+        });
+
+
+        //粘贴处理
+        this.on("paste",function(e){
+            if(e.clipboardData == null || e.clipboardData.items == null)
+                return;
+            for(var i = 0;i < e.clipboardData.items.length;i++){
+                var item = e.clipboardData.items[i];
+                if(item.kind == "string")
+                    item.getAsString(function(vals){
+                        self.sendMessage("paste-data",{kind:this.kind,type:this.type,data:vals});
+                    }.bind({kind:item.kind,type:item.type}));
+                if(item.kind == "file")
+                    self.sendMessage("paste-data",{kind:item.kind,type:item.type,data:item.getAsFile()});
+            }
         });
     }
 }

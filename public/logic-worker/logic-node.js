@@ -61,7 +61,11 @@ export var LogicNode = function(worker,key,saveInfo,correct = false){
         /**参数表 */
         args:{},
         /**输出表 */
-        values:{}
+        values:{},
+        /**@type 全局输入表 */
+        globalInput:[],
+        /**@type 全局输出表 */
+        globalOutput:[]
     }
 
     /**矫正属性内容 */
@@ -94,7 +98,7 @@ export var LogicNode = function(worker,key,saveInfo,correct = false){
                     self.state.forms[i] = {};
                 for(var j = 0;j < self.attr.manyNums[i];j++){
                     if(self.state.inputs[i].default != null && self.state.forms[i][j] == null)
-                        self.state.forms[i] = self.state.inputs[i].default;
+                        self.state.forms[i][j] = self.state.inputs[i].default;
                 }
             }else{
                 if(self.state.inputs[i].default != null && self.state.forms[i] == null)
@@ -107,6 +111,10 @@ export var LogicNode = function(worker,key,saveInfo,correct = false){
 
         //从表单更新参数
         for(var i in this.state.forms){
+            if(this.state.inputs[i] == null){
+                delete this.state.forms[i];
+                continue;
+            }
             if(this.state.inputs[i].many)
                 this.state.args[i] = {...this.state.forms[i]};
             else
@@ -136,8 +144,8 @@ export var LogicNode = function(worker,key,saveInfo,correct = false){
         for(var i in this.state.inputs){
             if(self.state.inputs[i].many){
                 for(var j = 0;j < self.attr.manyNums[i];j++){
-                    if(this.state.args[i] == null && this.state.inputs[i].default != null)
-                        this.state.args[i] = this.state.inputs[i].default;
+                    if(this.state.args[i][j] == null && this.state.inputs[i].default != null)
+                        this.state.args[i][j] = this.state.inputs[i].default;
                 }
             }else{
                 if(this.state.args[i] == null && this.state.inputs[i].default != null)
@@ -197,6 +205,8 @@ export var LogicNode = function(worker,key,saveInfo,correct = false){
                         this.state[i][j] = worker.checkTypeValue(state[i][j],self.state.inputs[j]);
                 }
                 updateArgs();
+                if(self.updateForms)
+                    self.updateForms();
                 continue;
             }
             //直接写入
@@ -414,12 +424,19 @@ export var LogicNode = function(worker,key,saveInfo,correct = false){
     this.infoRender = this.module.infoRender;
     this.autoRun = this.module.autoRun;
     this.save = this.module.save;
+    this.updateForms = this.module.updateForms;
 
     //初始化逻辑扩展
     if(this.module.init)
         this.module.init.call(this);
 
     //如果自动矫正
-    if(correct == true)
+    if(correct == true){
         this.correctData();
+    }
+    
+    //首次参数更新回调
+    if(this.updateForms)
+        this.updateForms();
+
 }

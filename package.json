@@ -6,7 +6,8 @@
 		"antd": "4.15.6",
 		"react": "16.10.2",
 		"react-dom": "16.10.2",
-		"css2json": "1.1.1"
+		"css2json": "1.1.1",
+		"react-gcolor-picker": "1.1.3"
 	},
 	"devDependencies": {
 		"@babel/preset-react": "^7.13.13",

@@ -1,8 +1,20 @@
 import {LogicWorker} from "logic-worker";
+import ReactGPicker from 'react-gcolor-picker';
 var lcg = require("lcg");
 var React = require("react");
 var Tools = require("rendering-tool");
 Tools.Loader.initPacs();
+
+var style = document.createElement("style");
+document.head.appendChild(style);
+style.innerHTML = `
+.gradient-result{
+    display:none;
+}
+.input_rgba-wrap{
+    display:none !important;
+}
+`
 
 //构建一个基础容器
 var BasePanle = function(vals,dom){
@@ -53,6 +65,44 @@ module.exports = function(logic){
             return BasePanle(vals,<input value={vals.value || ""} className="ant-input" style={{height:"22px",margin:"2px 5px",width:"calc(100% - 10px)"}} type="text" onChange={function(e){
                 vals.module.setValue(e.target.value);
             }}></input>);
+        }
+    });
+
+    //单选类型
+    logic.addType("select",{
+        name:"单选项",
+        formRender:function(vals){
+            var options = [];
+            for(var i in vals.conf.options)
+                options.push(<option value={i}>{vals.conf.options[i]}</option>);
+            return BasePanle(vals,<select value={vals.value || ""} className="ant-select" style={{height:"22px",margin:"2px 5px",width:"calc(100% - 10px)"}} onChange={function(e){
+                vals.module.setValue(e.target.value);
+            }}>{options}</select>);
+        }
+    });
+
+    //颜色类型
+    logic.addType("color",{
+        name:"颜色",
+        formRender:function(vals){
+            return BasePanle(vals,<input value={vals.value || ""} type="color" onChange={function(e){
+                vals.module.setValue(e.target.value);
+            }}></input>);
+        }
+    });
+
+    //渐变类型
+    logic.addType("gradient",{
+        name:"渐变色",
+        formRender:function(vals){
+            return BasePanle(vals,<div>
+                <div style={{textAlign:"left"}}><button style={{margin:"0px 10px"}} onClick={function(){vals.module.pickerShow = !vals.module.pickerShow;vals.module.$r();}}>编辑</button></div>
+                <div style={{display:vals.module.pickerShow?"":"none"}}>
+                    <ReactGPicker value={vals.value || "linear-gradient(0deg,#000 0%,#fff 100%)"} gradient={true} solid={false} defaultColors={[]} onChange={function(value){
+                        vals.module.setValue(value);
+                    }}></ReactGPicker>
+                </div>
+            </div>);
         }
     });
 
@@ -217,6 +267,7 @@ module.exports = function(logic){
                     return;
                 running = true;
                 await self.runOnce();
+                await lcg.delay(200);
                 running = false;
             });
         },
@@ -239,15 +290,57 @@ module.exports = function(logic){
     logic.addModule("base/tools/easy-var",{
         name:"变量",
         autoRun:true,
+        updateForms:function(){
+            if(this.state.forms["name"] == null || this.state.forms["name"].replace(/\s/g,"") == ""){
+                this.state.globalInput = [];
+            }else{
+                this.state.globalInput[0] = this.state.globalInput[0] || {
+                    input:"input",
+                    type:this.attr.var_type,
+                    key:this.state.forms["name"],
+                    name:this.state.forms["name"]
+                };
+            }
+        },
         init(){
             var type = this.worker.types[this.attr.var_type];
             this.setState({
-                inputs:{"input":{name:"变量",ban_link:true,type:this.attr.var_type}},
+                inputs:{
+                    "name":{name:"变量名",ban_link:true,type:"string"},
+                    "input":{name:"默认值",ban_link:true,type:this.attr.var_type,show:!type.formRender == null}
+                },
                 outputs:{"output":{name:"输出",type:this.attr.var_type}}
             });
         },
         run:function(args){
+            if(this.state.globalInput[0] && this.state.globalInput[0].value)
+                args.input = this.state.globalInput[0].value;
             return {output:args.input};
+        }
+    });
+
+    //变量输出
+    logic.addModule("base/tools/export-var",{
+        menu:"基础/工具/输出数据",
+        name:"输出数据",
+        updateForms:function(){
+            this.state.globalOutput = [];
+            if(this.state.forms["name"] == null || this.state.forms["name"].replace(/\s/g,"") == "")
+                return;
+            this.state.globalOutput = [{
+                name:this.state.forms["name"],
+                key:this.state.forms["name"],
+                value:this.data,
+                type:"*"
+            }];
+        },
+        inputs:{
+            "name":{name:"输出名",type:"string",ban_link:true},
+            "data":{name:"数据",type:"*",follow:true}
+        },
+        run(vals){
+            this.data = vals.data;
+            this.updateForms();
         }
     });
 

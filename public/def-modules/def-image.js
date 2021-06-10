@@ -1,4 +1,4 @@
-import {LogicWorker} from "logic-worker";
+import {LogicWorker,LogicNode} from "logic-worker";
 var Tools = require("../tools");
 var React = require("react");
 
@@ -20,17 +20,19 @@ var React = require("react");
         },
         autoRun:true,
         init:function(){
+            if(this.attr.importFile)
+                this.state.forms["file"] = this.attr.importFile;
             if(this.attr.base64)
                 this.imgInfo = {type:"url",data:this.attr.base64};
         },
         save:function(){
             this.attr.base64 = this.imgInfo.data;
         },
-        run:function(vals){
+        run:async function(vals){
             var self = this;
 			//如果没有变化则直接返回
 			if((self.file == null || vals.file == self.file) && self.imgInfo != null)
-				return {image:self.imgInfo};
+				return {image:await Tools.easyTexture(self,self.imgInfo)};
 			//如果图片为空则直接报错
 			if(vals.file == null)
 				throw new Error("没有选择文件");
@@ -45,9 +47,9 @@ var React = require("react");
 			return new Promise(function(next,err){
 				//载入dataURL
 				var reader = new FileReader();
-				reader.onload = function(){
+				reader.onload = async function(){
                     self.imgInfo = {type:"url",data:this.result};
-                    next({image:self.imgInfo});
+                    next({image:await Tools.easyTexture(self,self.imgInfo)});
 				}
 				//开始载入文件
 				reader.readAsDataURL(vals.file);
@@ -127,38 +129,45 @@ var React = require("react");
 
 
 
-    logic.addModule("image:filter-test",{
-        menu:"图像/滤镜/测试滤镜",
-        name:"测试滤镜",
+    logic.addModule("image:filter-mix-color",{
+        menu:"图像/滤镜/颜色叠加",
+        name:"颜色叠加",
         inputs:{
-            image:{type:"image",name:"图像"}
+            image:{type:"image",name:"图像"},
+            type:{type:"select",options:{"1":"颜色叠加","2":"渐变叠加","3":"图案叠加"},name:"类型",default:"1",ban_link:true}
         },
         outputs:{
             image:{type:"image",name:"图像"}
         },
-        run:async function(vals){
-            this.tex = this.tex || Tools.gpu.createElementTexture();
-            this.fbi = this.fbi || Tools.gpu.createFrameBuffer({layers:["RGBA"]});
-            this.shader = this.shader || Tools.gpu.createShader(`#include base;
-                uniform sampler2D u_tex;
-                out vec4 color;
-                void main(){
-                    vec4 c = texture(u_tex,vUV);
-                    color = c;
-                }
+        updateForms:function(){
+            var self = this;
+            if(this.lastType != this.state.forms["type"]){
+                self.lastType = this.state.forms["type"];
+                delete this.state.inputs["color"];
+                delete this.state.inputs["gradient"];
+                if(this.state.forms["type"] == "1")
+                    this.state.inputs["color"] = {type:"color",name:"颜色"};
+                if(this.state.forms["type"] == "2")
+                    this.state.inputs["color"] = {type:"gradient",name:"渐变"};
+            }
+        },
+        run:function(vals){
+            var image = new Tools.DisplayObject(vals.image);
+            this.filter = this.filter || new Tools.Filter(`#include base;
+            uniform sampler2D u_tex_data;
+            uniform vec4 u_color;
+            out vec4 color;
+            void main(){
+                float a = texture(u_tex_data,vUV).a;
+                color = vec4(vec3(1,1,1),a);
+            }
             `);
-            var img = await Tools.image2Texture(vals.image,this.tex);
-            window.gpu = Tools.gpu;
-            this.fbi.resize(img.width,img.height);
-            //渲染内容
-            Tools.gpu.renderShader(this.shader,{u_tex:img.data},this.fbi);
+            this.filter.shader.setUniforms({
+                u_color:Tools.color2Vec4(vals.color || "#000")
+            });
+            image.addUniqueFilter(this.filter);
             //返回贴图
-            return {image:{
-                type:"texture",
-                width:img.width,
-                height:img.height,
-                data:this.fbi.getLayer(0)
-            }}
+            return {image:image}
         }
     });
 
@@ -191,6 +200,6 @@ var React = require("react");
                 }
             }
         }
-    })
+    });
 
  }

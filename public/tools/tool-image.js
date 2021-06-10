@@ -1,4 +1,5 @@
 import { GPUWorker } from "gpu-worker";
+var lcg = require("lcg");
 
 /**全局公用gpu实例 */
 export var gpu = new GPUWorker();
@@ -167,4 +168,36 @@ export var image2Texture = async function(image,texture,g){
         texture.updateData(image.data);
         return {type:"texture",width:image.data.width,height:image.data.height,data:texture};
     }
+}
+
+/**简单的快速转换贴图 */
+export var easyTexture = async function(module,img){
+	module.texture = module.texture || gpu.createElementTexture();
+	return await image2Texture(img,module.texture);
+}
+
+
+
+export var color2Vec4 = function(color){
+	color = lcg.easycolor(color);
+	return [color.r / 255,color.g / 255,color.b / 255,color.a];
+}
+
+/**
+ * 渐变字符串生成渐变数组
+ * @param {string} gradient 
+ * @param {number} count
+ */
+export var gradient2Data = function(gradient,count = 100){
+	var str = gradient.split(",")[1];
+	str = str.substr(0,str.length - 1);
+	var colors = str.split(",");
+	for(var i in colors){
+		var kz = colors[i].split(" ");
+		colors[i] = [];
+		for(var j in kz)
+			if(kz[j] != "")
+				colors[i].push(kz[j]);
+	}
+	console.log(colors);
 }
