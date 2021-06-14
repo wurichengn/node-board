@@ -189,15 +189,54 @@ export var color2Vec4 = function(color){
  * @param {number} count
  */
 export var gradient2Data = function(gradient,count = 100){
-	var str = gradient.split(",")[1];
-	str = str.substr(0,str.length - 1);
-	var colors = str.split(",");
-	for(var i in colors){
-		var kz = colors[i].split(" ");
-		colors[i] = [];
-		for(var j in kz)
-			if(kz[j] != "")
-				colors[i].push(kz[j]);
+	var str = gradient;
+	str = str.substr(str.indexOf(",") + 1);
+	var cs = str.split(/%,|%\)/);
+	var colors = [];
+	for(var i in cs){
+		var kz = cs[i].replace(/^\s+/,"").split(" ");
+		if(kz.length < 2)
+			continue;
+		colors.push([Number(kz[kz.length - 1]) / 100]);
+		kz.splice(kz.length - 1,1);
+		colors[colors.length - 1].push(lcg.easycolor(kz.join(" ")));
 	}
+	
+	colors.sort(function(a,b){
+		return a[0] - b[0];
+	});
+
 	console.log(colors);
+
+	var re = [];
+	for(var i = 0;i < count;i++){
+		var bl = i / count;
+		var pushEnd = false;
+		for(var j in colors){
+			j = Number(j);
+			var cn = colors[j];
+			var cd = colors[j + 1] || colors[j];
+			if(bl >= cn[0] && bl <= cd[0]){
+				var bl = (bl - cn[0]) / (cd[0] - cn[0]);
+				re.push([(cn[1].r * (1 - bl) + cd[1].r * bl) / 255,
+						(cn[1].g * (1 - bl) + cd[1].g * bl) / 255,
+						(cn[1].b * (1 - bl) + cd[1].b * bl) / 255,
+						(cn[1].a * (1 - bl) + cd[1].a * bl)]);
+				pushEnd = true;
+				break;
+			}
+		}
+		if(!pushEnd)
+			re.push([cd[1].r / 255,cd[1].g / 255,cd[1].b / 255,cd[1].a]);
+	}
+
+	var buffer = new Uint8Array(count * 4);
+	for(var i in re){
+		var idx = i * 4;
+		buffer[idx + 0] = re[i][0] * 255;
+		buffer[idx + 1] = re[i][1] * 255;
+		buffer[idx + 2] = re[i][2] * 255;
+		buffer[idx + 3] = re[i][3] * 255;
+	}
+	return buffer;
 }

@@ -8,6 +8,8 @@ require("lcg-style");
 var LcgReact = require("lcg-react");
 var React = require("react");
 
+window.window.__glsl_pack_debug = true;
+
 export class ImageEditor extends LcgReact.define({},{
     /**是否显示结构图 */
     mapShow:false,

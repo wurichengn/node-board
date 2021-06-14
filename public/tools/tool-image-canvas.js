@@ -135,6 +135,6 @@ void main(){
     if(image_uv.x < 0.0 || image_uv.y < 0.0 || image_uv.x > 1.0 || image_uv.y > 1.0)
         return;
     vec4 image = texture(u_tex_layer,image_uv);
-    color = color * (1.0 - image.a) + image;
+    color = color * (1.0 - image.a) + image * image.a;
 }
 `);

@@ -1,6 +1,8 @@
 import {LogicWorker,LogicNode} from "logic-worker";
+import { gradient2Data } from "tools/tool-image";
 var Tools = require("../tools");
 var React = require("react");
+var THREE = require("three");
 
 
 /**
@@ -159,7 +161,7 @@ var React = require("react");
             out vec4 color;
             void main(){
                 float a = texture(u_tex_data,vUV).a;
-                color = vec4(vec3(1,1,1),a);
+                color = vec4(u_color.rgb,a);
             }
             `);
             this.filter.shader.setUniforms({
@@ -170,6 +172,221 @@ var React = require("react");
             return {image:image}
         }
     });
+
+
+
+    logic.addModule("image:filter-line-shadow",{
+        menu:"图像/滤镜/线性投影",
+        name:"线性投影",
+        inputs:{
+            image:{type:"image",name:"图像"},
+            light_angle:{type:"number",name:"光照角度",default:45},
+            light_step:{type:"number",name:"投影步数",default:30,max:200,min:1},
+            light_length:{type:"number",name:"投影长度",default:20,max:500,min:0},
+            shadow_opacity:{type:"number",name:"透明度",default:1,max:200,min:0,step:0.01},
+            shadow_line:{type:"gradient",name:"颜色渐变"}
+        },
+        outputs:{
+            image:{type:"image",name:"图像"}
+        },
+        run:function(vals){
+            var image = new Tools.DisplayObject(vals.image);
+
+            var bl = vals.light_length / vals.light_step;
+
+            this.tex = this.tex || Tools.gpu.createDataTexture(new Uint8Array(100 * 4),{type:"RGBA",width:100,height:1});
+            if(vals.shadow_line){
+                var line = gradient2Data(vals.shadow_line);
+                this.tex.updateData(line);
+            }
+
+            //计算光照角度
+            var light_angle = Math.PI * vals.light_angle / 180;
+            light_angle = [Math.cos(light_angle) * bl,Math.sin(light_angle) * bl];
+
+            this.filter = this.filter || new Tools.Filter(`#include base;
+            uniform sampler2D u_tex_data;
+            uniform vec2 u_dir;
+            uniform int u_step;
+            uniform float u_opacity;
+            uniform sampler2D u_tex_line;
+
+            out vec4 color;
+            void main(){
+                vec4 p_color = texture(u_tex_data,vUV);
+                if(p_color.a == 1.0){
+                    color = p_color;
+                    return;
+                }
+                vec4 m_color = vec4(0,0,0,0);
+                vec2 dir = u_dir / u_view_size;
+                vec2 pos = vUV;
+                float bl = 1.0;
+                float off;
+                for(int i = 0;i < u_step;i++){
+                    pos += dir;
+                    off = float(i) / float(u_step);
+                    float a = texture(u_tex_data,pos).a;
+                    a = min(1.0 - m_color.a,a);
+                    m_color += texture(u_tex_line,vec2(off,0.5)) * a * bl;
+                    if(m_color.a >= 1.0)
+                        break;
+                }
+
+                m_color *= min(1.0,u_opacity);
+                color = m_color * (1.0 - p_color.a) + vec4(p_color.a * p_color.rgb,p_color.a);
+            }
+            `);
+            this.filter.shader.setUniforms({
+                u_dir:light_angle,
+                u_step:vals.light_step,
+                u_opacity:vals.shadow_opacity,
+                u_tex_line:this.tex
+            });
+            image.addUniqueFilter(this.filter);
+            //返回贴图
+            return {image:image}
+        }
+    });
+
+
+
+    logic.addModule("image:filter-color-separate",{
+        menu:"图像/滤镜/色调分离",
+        name:"色调分离",
+        inputs:{
+            image:{type:"image",name:"图像"},
+            angle:{type:"number",name:"角度",default:45},
+            length:{type:"number",name:"距离",default:10,max:500,min:0}
+        },
+        outputs:{
+            image:{type:"image",name:"图像"}
+        },
+        run:function(vals){
+            var image = new Tools.DisplayObject(vals.image);
+
+            //计算光照角度
+            var angle = Math.PI * vals.angle / 180;
+            angle = [Math.cos(angle) * vals.length,Math.sin(angle) * vals.length];
+            console.log(angle);
+
+            this.filter = this.filter || new Tools.Filter(`#include base;
+            uniform sampler2D u_tex_data;
+            uniform vec2 u_dir;
+
+
+
+            out vec4 color;
+            void main(){
+                vec2 dir = u_dir / u_view_size;
+                vec4 c;
+                color = vec4(0,0,0,0);
+                c = texture(u_tex_data,vUV);
+                color.g += c.g * c.a;
+                color.a += c.a * 0.333;
+
+                c = texture(u_tex_data,vUV + dir);
+                color.r += c.r * c.a;
+                color.a += c.a * 0.333;
+
+                c = texture(u_tex_data,vUV - dir);
+                color.b += c.b * c.a;
+                color.a += c.a * 0.333;
+            }
+            `);
+            this.filter.shader.setUniforms({
+                u_dir:angle
+            });
+            image.addUniqueFilter(this.filter);
+            //返回贴图
+            return {image:image}
+        }
+    });
+
+
+
+
+    logic.addModule("image:filter-gradient-line",{
+        menu:"图像/滤镜/渐变映射",
+        name:"渐变映射",
+        inputs:{
+            image:{type:"image",name:"图像"},
+            color_line:{type:"gradient",name:"渐变",default:""}
+        },
+        outputs:{
+            image:{type:"image",name:"图像"}
+        },
+        run:function(vals){
+            var image = new Tools.DisplayObject(vals.image);
+
+            this.tex = this.tex || Tools.gpu.createDataTexture(new Uint8Array(256 * 4),{type:"RGBA",width:256,height:1,mag:Tools.gpu.gl.NEAREST});
+            if(vals.color_line){
+                var line = gradient2Data(vals.color_line,256);
+                console.log(line);
+                this.tex.updateData(line);
+            }
+
+            this.filter = this.filter || new Tools.Filter(`#include base;
+            uniform sampler2D u_tex_data;
+            uniform sampler2D u_line;
+
+            out vec4 color;
+            void main(){
+                vec4 c = texture(u_tex_data,vUV);
+                float bl = (c.r + c.g + c.b) / 3.0;
+                color = texture(u_line,vec2(bl,0.5)) * c.a;
+            }
+            `);
+            this.filter.shader.setUniforms({
+                u_line:this.tex
+            });
+            image.addUniqueFilter(this.filter);
+            //返回贴图
+            return {image:image};
+        }
+    });
+
+
+
+    logic.addModule("image:filter-polka-dot",{
+        menu:"图像/滤镜/波点化",
+        name:"波点化",
+        inputs:{
+            image:{type:"image",name:"图像"}
+        },
+        outputs:{
+            image:{type:"image",name:"图像"}
+        },
+        run:function(vals){
+            var image = new Tools.DisplayObject(vals.image);
+
+            this.filter = this.filter || new Tools.Filter(`#include base;
+            uniform sampler2D u_tex_data;
+
+            float size = 5.0;
+
+            out vec4 color;
+            void main(){
+                vec2 p = vUV * u_view_size;
+                vec2 cp = vec2(floor(p.x / size) * size + size * 0.5,floor(p.y / size) * size + size * 0.5);
+                vec4 c = texture(u_tex_data,cp / u_view_size);
+                float bl = (c.r + c.g + c.b) * c.a / 3.0;
+                color = c;
+                color = vec4(0,0,0,1) * c.a;
+                //混合透明程度
+                color = mix(color,vec4(0,0,0,0),max(min(distance(p,cp) + 0.5 - size / 2.0 * (1.0 - bl),1.0),0.0));
+            }
+            `);
+            this.filter.shader.setUniforms({
+                //u_line:this.tex
+            });
+            image.addUniqueFilter(this.filter);
+            //返回贴图
+            return {image:image};
+        }
+    });
+
+
 
 
     logic.addModule("image:image-canvas",{

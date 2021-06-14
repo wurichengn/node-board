@@ -6,7 +6,7 @@ import {gpu} from "./index.js";
 /**图层显示用对象 */
 export var DisplayObject = function(image){
     if(image.__isDisPlayObject)
-        return image;
+        return image.clone();
     /**判断显示对象用 */
     this.__isDisPlayObject = true;
     /**对象唯一编号 */
@@ -46,6 +46,7 @@ export var DisplayObject = function(image){
         re.position.copy(this.position);
         re.scale.copy(this.scale);
         re.rotation.copy(this.rotation);
+        return re;
     }
 }
 
